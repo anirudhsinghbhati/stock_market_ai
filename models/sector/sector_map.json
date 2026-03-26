@@ -1,0 +1,29 @@
+{
+  "source": "default_map",
+  "symbols": [
+    "RELIANCE.NS",
+    "TCS.NS",
+    "INFY.NS",
+    "HDFCBANK.NS",
+    "ICICIBANK.NS",
+    "SBIN.NS",
+    "LT.NS",
+    "ITC.NS"
+  ],
+  "sector_map": {
+    "RELIANCE.NS": "Energy",
+    "TCS.NS": "IT",
+    "INFY.NS": "IT",
+    "HDFCBANK.NS": "Banking",
+    "ICICIBANK.NS": "Banking",
+    "SBIN.NS": "Banking",
+    "LT.NS": "Infrastructure",
+    "ITC.NS": "FMCG"
+  },
+  "stats": {
+    "total_symbols": 8,
+    "mapped_symbols": 8,
+    "unmapped_symbols": 0,
+    "source": "default_map"
+  }
+}

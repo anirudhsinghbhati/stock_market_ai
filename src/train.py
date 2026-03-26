@@ -8,8 +8,9 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
-from typing import Any, Dict, List, Optional, Tuple, TypedDict, cast
+from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict, cast
 
 import joblib
 import matplotlib.pyplot as plt
@@ -39,13 +40,14 @@ MULTICLASS_LABELS = {
     2: "Weak Up",
     3: "Strong Up",
 }
-SUPPORTED_TIMEFRAMES = {"intraday", "1d", "1w", "1m", "6m"}
+SUPPORTED_TIMEFRAMES = {"intraday", "1d", "1w", "1m", "6m", "1y"}
 TIMEFRAME_MIN_ROWS = {
     "intraday": 80,
     "1d": 80,
     "1w": 40,
     "1m": 24,
     "6m": 8,
+    "1y": 5,
 }
 DEFAULT_NSE_STOCKS = [
     "RELIANCE.NS",
@@ -137,6 +139,502 @@ class MultiStockTrainResult(TypedDict):
     selected_features: List[str]
     symbols_used: List[str]
     total_rows: int
+
+
+class SectorMapStats(TypedDict):
+    total_symbols: int
+    mapped_symbols: int
+    unmapped_symbols: int
+    source: str
+
+
+class SectorModelArtifact(TypedDict):
+    sector: str
+    model_path: str
+    feature_columns: List[str]
+    train_rows: int
+    val_metric: float | None
+    class_balance: Dict[str, float] | None
+
+
+class TrainSectorModelsResult(TypedDict):
+    global_model_path: str
+    sector_models: Dict[str, SectorModelArtifact]
+    sector_map_path: str
+    skipped_sectors: Dict[str, str]
+    metrics: Dict[str, Any]
+
+
+class RouterDecision(TypedDict):
+    symbol: str
+    sector: str
+    route: Literal["sector_only", "global_only", "blended"]
+    sector_weight: float
+    global_weight: float
+    reason: str
+
+
+class RouterPrediction(TypedDict):
+    prediction: int
+    probability_up: float
+    decision: RouterDecision
+
+
+DEFAULT_SECTOR_MAP: Dict[str, str] = {
+    "RELIANCE.NS": "Energy",
+    "ONGC.NS": "Energy",
+    "BPCL.NS": "Energy",
+    "IOC.NS": "Energy",
+    "TCS.NS": "IT",
+    "INFY.NS": "IT",
+    "WIPRO.NS": "IT",
+    "HCLTECH.NS": "IT",
+    "HDFCBANK.NS": "Banking",
+    "ICICIBANK.NS": "Banking",
+    "KOTAKBANK.NS": "Banking",
+    "AXISBANK.NS": "Banking",
+    "SBIN.NS": "Banking",
+    "LT.NS": "Infrastructure",
+    "ITC.NS": "FMCG",
+}
+
+
+def normalize_symbol_for_sector_map(symbol: str) -> str:
+    """Normalize symbol to a canonical uppercase ticker form."""
+    cleaned = str(symbol or "").strip().upper()
+    return cleaned
+
+
+def validate_sector_map(symbols: List[str], sector_map: Dict[str, str]) -> SectorMapStats:
+    """Validate mapping coverage for requested symbols."""
+    normalized_symbols = [normalize_symbol_for_sector_map(symbol) for symbol in symbols]
+    mapped = sum(1 for symbol in normalized_symbols if symbol in sector_map and str(sector_map[symbol]).strip())
+    total = len(normalized_symbols)
+    return {
+        "total_symbols": int(total),
+        "mapped_symbols": int(mapped),
+        "unmapped_symbols": int(total - mapped),
+        "source": "runtime_validation",
+    }
+
+
+def load_sector_map(
+    symbols: List[str],
+    mapping_csv_path: str | None = None,
+    fallback: Literal["unknown", "infer_from_existing_map"] = "unknown",
+    cache_path: str | None = None,
+) -> Tuple[Dict[str, str], SectorMapStats]:
+    """Load sector mapping from CSV and defaults with deterministic fallbacks."""
+    normalized_symbols = [normalize_symbol_for_sector_map(symbol) for symbol in symbols]
+    sector_map: Dict[str, str] = {}
+    source = "default_map"
+
+    if mapping_csv_path:
+        csv_df = pd.read_csv(mapping_csv_path)
+        if csv_df.empty:
+            raise ValueError("Provided mapping CSV is empty.")
+
+        normalized_columns = {str(column).strip().lower(): str(column) for column in csv_df.columns}
+        symbol_col = normalized_columns.get("symbol")
+        sector_col = normalized_columns.get("sector")
+        if symbol_col is None or sector_col is None:
+            raise ValueError("mapping_csv_path must contain columns named 'Symbol' and 'Sector'.")
+
+        for _, row in csv_df.iterrows():
+            sym = normalize_symbol_for_sector_map(row.get(symbol_col, ""))
+            sec = str(row.get(sector_col, "")).strip()
+            if not sym or not sec:
+                continue
+            sector_map[sym] = sec
+        source = "csv"
+
+    base_map = dict(DEFAULT_SECTOR_MAP)
+    base_map.update(sector_map)
+
+    resolved_map: Dict[str, str] = {}
+    for symbol in normalized_symbols:
+        if symbol in base_map and str(base_map[symbol]).strip():
+            resolved_map[symbol] = str(base_map[symbol]).strip()
+            continue
+
+        if fallback == "infer_from_existing_map":
+            base_symbol = symbol.replace(".NS", "")
+            inferred = next(
+                (
+                    str(sector)
+                    for key, sector in base_map.items()
+                    if key.replace(".NS", "") == base_symbol and str(sector).strip()
+                ),
+                "Unknown",
+            )
+            resolved_map[symbol] = inferred
+        else:
+            resolved_map[symbol] = "Unknown"
+
+    stats = validate_sector_map(normalized_symbols, resolved_map)
+    stats["source"] = source
+
+    if cache_path:
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        cache_payload = {
+            "source": source,
+            "symbols": normalized_symbols,
+            "sector_map": resolved_map,
+            "stats": stats,
+        }
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(cache_payload, f, indent=2)
+
+    return resolved_map, stats
+
+
+def _align_features_for_model(latest_features: pd.DataFrame, selected_features: List[str]) -> pd.DataFrame:
+    """Align latest feature row to model schema, filling missing with zeros."""
+    aligned = latest_features.copy()
+    for column in selected_features:
+        if column not in aligned.columns:
+            aligned[column] = 0.0
+    return aligned[selected_features]
+
+
+def _blend_probabilities(
+    symbol: str,
+    sector: str,
+    p_global: float,
+    p_sector: float | None,
+    blend_mode: str,
+    fixed_sector_weight: float,
+    min_sector_confidence: float,
+) -> Tuple[float, RouterDecision]:
+    """Blend global and sector probabilities and return router decision metadata."""
+    if p_sector is None:
+        decision: RouterDecision = {
+            "symbol": symbol,
+            "sector": sector,
+            "route": "global_only",
+            "sector_weight": 0.0,
+            "global_weight": 1.0,
+            "reason": "sector_model_unavailable",
+        }
+        return float(p_global), decision
+
+    if blend_mode == "confidence_weighted":
+        distance = abs(float(p_sector) - 0.5) * 2.0
+        sector_weight = min(0.9, max(0.1, distance))
+        route = "blended"
+        reason = "confidence_weighted_blend"
+    else:
+        sector_weight = float(fixed_sector_weight)
+        route = "blended"
+        reason = "fixed_blend"
+
+    if abs(float(p_sector) - 0.5) < (float(min_sector_confidence) - 0.5):
+        sector_weight = min(sector_weight, 0.35)
+        reason = "sector_confidence_low_blend_downweighted"
+
+    sector_weight = min(1.0, max(0.0, sector_weight))
+    global_weight = 1.0 - sector_weight
+    p_final = (sector_weight * float(p_sector)) + (global_weight * float(p_global))
+
+    decision = {
+        "symbol": symbol,
+        "sector": sector,
+        "route": route,
+        "sector_weight": float(sector_weight),
+        "global_weight": float(global_weight),
+        "reason": reason,
+    }
+    return float(p_final), decision
+
+
+def predict_with_sector_router(
+    symbol: str,
+    latest_features: pd.DataFrame,
+    global_model: Any,
+    sector_models: Dict[str, Any],
+    sector_map: Dict[str, str],
+    blend_mode: Literal["fixed", "confidence_weighted"] = "fixed",
+    fixed_sector_weight: float = 0.65,
+    min_sector_confidence: float = 0.55,
+) -> RouterPrediction:
+    """Predict with symbol-aware routing and global/sector probability blending."""
+    normalized_symbol = normalize_symbol_for_sector_map(symbol)
+    sector = str(sector_map.get(normalized_symbol, "Unknown"))
+
+    global_selected = global_model.get("selected_features", list(latest_features.columns)) if isinstance(global_model, dict) else list(latest_features.columns)
+    global_input = _sanitize_matrix(_align_features_for_model(pd.DataFrame(latest_features), list(global_selected)))
+    p_global = float(predict_probability(global_model, global_input)[0])
+
+    sector_model = sector_models.get(sector)
+    p_sector: float | None = None
+    if sector_model is not None:
+        sector_selected = sector_model.get("selected_features", list(latest_features.columns)) if isinstance(sector_model, dict) else list(latest_features.columns)
+        sector_input = _sanitize_matrix(_align_features_for_model(pd.DataFrame(latest_features), list(sector_selected)))
+        p_sector = float(predict_probability(sector_model, sector_input)[0])
+
+    p_final, decision = _blend_probabilities(
+        symbol=normalized_symbol,
+        sector=sector,
+        p_global=p_global,
+        p_sector=p_sector,
+        blend_mode=blend_mode,
+        fixed_sector_weight=fixed_sector_weight,
+        min_sector_confidence=min_sector_confidence,
+    )
+
+    return {
+        "prediction": int(1 if p_final >= 0.5 else 0),
+        "probability_up": float(p_final),
+        "decision": decision,
+    }
+
+
+def _period_to_start_end(period: str) -> Tuple[str, str]:
+    """Convert a period string like 2y/6mo/90d into start and end dates."""
+    end_dt = pd.Timestamp.today().normalize()
+    text = str(period).strip().lower()
+
+    if text.endswith("y"):
+        years = int(text[:-1])
+        start_dt = end_dt - pd.DateOffset(years=years)
+    elif text.endswith("mo"):
+        months = int(text[:-2])
+        start_dt = end_dt - pd.DateOffset(months=months)
+    elif text.endswith("d"):
+        days = int(text[:-1])
+        start_dt = end_dt - pd.Timedelta(days=days)
+    else:
+        raise ValueError("Unsupported period format. Use patterns like '2y', '6mo', or '90d'.")
+
+    return start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
+
+
+def _build_sector_training_frame(
+    all_data: pd.DataFrame,
+    sector_map: Dict[str, str],
+    target_sector: str,
+) -> pd.DataFrame:
+    """Filter pooled rows to one target sector using symbol mapping."""
+    if "Symbol" not in all_data.columns:
+        raise ValueError("Expected 'Symbol' column in pooled data for sector filtering.")
+
+    frame = all_data.copy()
+    frame["Sector"] = frame["Symbol"].map(
+        lambda sym: sector_map.get(normalize_symbol_for_sector_map(sym), "Unknown")
+    )
+    return frame[frame["Sector"] == target_sector].reset_index(drop=True)
+
+
+def _train_one_sector_model(
+    sector_df: pd.DataFrame,
+    model_type: str,
+    leakage_exclude_tokens: List[str] | None = None,
+) -> Tuple[Any, List[str], Dict[str, Any]]:
+    """Train one sector model and return trained model, schema, and metrics."""
+    encoded = encode_symbol_feature(sector_df)
+    encoded_clean = encoded.copy()
+    numeric_cols = encoded_clean.select_dtypes(include=[np.number]).columns.tolist()
+    if numeric_cols:
+        encoded_clean[numeric_cols] = (
+            encoded_clean[numeric_cols].replace([np.inf, -np.inf], np.nan).fillna(0.0)
+        )
+
+    final_dataset, X, y = prepare_training_matrices(encoded_clean, drop_date=False)
+    feature_columns = get_feature_columns(final_dataset)
+    if leakage_exclude_tokens:
+        lowered_tokens = [token.lower() for token in leakage_exclude_tokens]
+        feature_columns = [
+            column
+            for column in feature_columns
+            if not any(token in str(column).lower() for token in lowered_tokens)
+        ]
+
+    if not feature_columns:
+        raise ValueError("No usable features found for sector model training.")
+
+    dates = final_dataset["Date"] if "Date" in final_dataset.columns else None
+    model, metrics = train_model(
+        X[feature_columns],
+        y,
+        feature_columns=feature_columns,
+        dates=dates,
+        model_family=model_type,
+    )
+    selected_features = model.get("selected_features", feature_columns) if isinstance(model, dict) else feature_columns
+    return model, list(selected_features), metrics
+
+
+def train_sector_models(
+    symbols: List[str],
+    period: str = "2y",
+    interval: str = "1d",
+    model_type: str = "xgboost",
+    min_rows_per_sector: int = 3000,
+    min_symbols_per_sector: int = 3,
+    save_dir: str = "models/sector",
+    run_backtests: bool = False,
+) -> TrainSectorModelsResult:
+    """Train one global model and per-sector models, then persist manifest artifacts."""
+    del interval, run_backtests  # Reserved for future expansion.
+
+    if not symbols:
+        raise ValueError("symbols cannot be empty.")
+
+    start_date, end_date = _period_to_start_end(period)
+    os.makedirs(save_dir, exist_ok=True)
+
+    sector_map_path = os.path.join(save_dir, "sector_map.json")
+    sector_map, sector_map_stats = load_sector_map(
+        symbols=symbols,
+        mapping_csv_path=None,
+        fallback="infer_from_existing_map",
+        cache_path=sector_map_path,
+    )
+
+    pooled = fetch_all_stocks(symbols, start_date=start_date, end_date=end_date)
+    global_result = train_multi_stock_model(
+        start_date=start_date,
+        end_date=end_date,
+        model_family=model_type,
+        stocks=symbols,
+    )
+
+    global_model_path = os.path.join(save_dir, "global_model.pkl")
+    joblib.dump(global_result["model"], global_model_path)
+
+    pooled_with_sector = pooled.copy()
+    pooled_with_sector["Sector"] = pooled_with_sector["Symbol"].map(
+        lambda sym: sector_map.get(normalize_symbol_for_sector_map(sym), "Unknown")
+    )
+
+    sector_models: Dict[str, SectorModelArtifact] = {}
+    skipped_sectors: Dict[str, str] = {}
+    trained_models_by_sector: Dict[str, Any] = {}
+    unique_sectors = sorted(pooled_with_sector["Sector"].dropna().astype(str).unique().tolist())
+
+    for sector in unique_sectors:
+        sector_df = _build_sector_training_frame(
+            all_data=pooled_with_sector,
+            sector_map=sector_map,
+            target_sector=sector,
+        )
+        symbol_count = int(sector_df["Symbol"].nunique()) if "Symbol" in sector_df.columns else 0
+        row_count = int(len(sector_df))
+
+        if row_count < int(min_rows_per_sector):
+            skipped_sectors[sector] = f"insufficient_rows:{row_count}"
+            continue
+        if symbol_count < int(min_symbols_per_sector):
+            skipped_sectors[sector] = f"insufficient_symbols:{symbol_count}"
+            continue
+
+        model, selected_features, metrics = _train_one_sector_model(
+            sector_df=sector_df,
+            model_type=model_type,
+            leakage_exclude_tokens=["target", "future", "next", "lead"],
+        )
+        trained_models_by_sector[sector] = model
+
+        sector_dir_name = sector.strip().lower().replace(" ", "_")
+        sector_model_dir = os.path.join(save_dir, sector_dir_name)
+        os.makedirs(sector_model_dir, exist_ok=True)
+        sector_model_path = os.path.join(sector_model_dir, "model.pkl")
+        joblib.dump(model, sector_model_path)
+
+        target_rate = float(sector_df["Target"].mean()) if "Target" in sector_df.columns and len(sector_df) else 0.0
+        accuracy_val = metrics.get("accuracy")
+        sector_models[sector] = {
+            "sector": sector,
+            "model_path": sector_model_path,
+            "feature_columns": list(selected_features),
+            "train_rows": row_count,
+            "val_metric": float(accuracy_val) if accuracy_val is not None else None,
+            "class_balance": {
+                "target_1_rate": target_rate,
+                "target_0_rate": float(1.0 - target_rate),
+            },
+        }
+
+    manifest_path = os.path.join(save_dir, "manifest.json")
+    manifest = {
+        "version": 1,
+        "trained_at": pd.Timestamp.utcnow().isoformat(),
+        "symbols": [normalize_symbol_for_sector_map(symbol) for symbol in symbols],
+        "sectors": sorted(list(sector_models.keys())),
+        "global_model_path": global_model_path,
+        "global_selected_features": global_result.get("selected_features", []),
+        "sector_models": sector_models,
+        "skipped_sectors": skipped_sectors,
+        "sector_map_path": sector_map_path,
+        "sector_map_stats": sector_map_stats,
+    }
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+
+    # Persist lightweight router bundle for fast app loading.
+    router_bundle_path = os.path.join(save_dir, "router_bundle.pkl")
+    joblib.dump(
+        {
+            "global_model": global_result["model"],
+            "sector_models": trained_models_by_sector,
+            "sector_map": sector_map,
+            "manifest_path": manifest_path,
+        },
+        router_bundle_path,
+    )
+
+    return {
+        "global_model_path": global_model_path,
+        "sector_models": sector_models,
+        "sector_map_path": sector_map_path,
+        "skipped_sectors": skipped_sectors,
+        "metrics": {
+            "global_accuracy": float(global_result["metrics"].get("accuracy", 0.0)),
+            "global_rows": int(global_result.get("total_rows", 0)),
+            "num_trained_sectors": int(len(sector_models)),
+            "num_skipped_sectors": int(len(skipped_sectors)),
+            "manifest_path": manifest_path,
+            "router_bundle_path": router_bundle_path,
+        },
+    }
+
+
+def predict_with_saved_sector_router(
+    symbol: str,
+    latest_features: pd.DataFrame,
+    save_dir: str = "models/sector",
+    blend_mode: Literal["fixed", "confidence_weighted"] = "fixed",
+    fixed_sector_weight: float = 0.65,
+    min_sector_confidence: float = 0.55,
+) -> RouterPrediction | None:
+    """Run router inference from saved artifacts when available.
+
+    Returns None if artifacts are missing so callers can safely fall back.
+    """
+    router_bundle_path = os.path.join(save_dir, "router_bundle.pkl")
+    if not os.path.exists(router_bundle_path):
+        return None
+
+    bundle = joblib.load(router_bundle_path)
+    if not isinstance(bundle, dict):
+        return None
+
+    global_model = bundle.get("global_model")
+    sector_models = bundle.get("sector_models", {})
+    sector_map = bundle.get("sector_map", {})
+    if global_model is None or not isinstance(sector_models, dict) or not isinstance(sector_map, dict):
+        return None
+
+    return predict_with_sector_router(
+        symbol=symbol,
+        latest_features=latest_features,
+        global_model=global_model,
+        sector_models=cast(Dict[str, Any], sector_models),
+        sector_map=cast(Dict[str, str], sector_map),
+        blend_mode=blend_mode,
+        fixed_sector_weight=fixed_sector_weight,
+        min_sector_confidence=min_sector_confidence,
+    )
 
 
 def persist_trained_models(
@@ -579,7 +1077,7 @@ def _fetch_intraday_data(symbol: str, start_date: str, end_date: Optional[str] =
 
 
 def _load_dataset_for_timeframe(symbol: str, timeframe: str, start_date: str, end_date: str) -> pd.DataFrame:
-    """Load timeframe-specific dataset (intraday, daily, weekly, monthly, 6-month)."""
+    """Load timeframe-specific dataset (intraday, daily, weekly, monthly, 6-month, yearly)."""
     if timeframe not in SUPPORTED_TIMEFRAMES:
         raise ValueError(f"Unsupported timeframe '{timeframe}'. Supported: {sorted(SUPPORTED_TIMEFRAMES)}")
 
@@ -600,9 +1098,11 @@ def _load_dataset_for_timeframe(symbol: str, timeframe: str, start_date: str, en
         return _resample_ohlcv(daily, rule="W")
     if timeframe == "1m":
         return _resample_ohlcv(daily, rule="ME")
+    if timeframe == "6m":
+        return _resample_ohlcv(daily, rule="6ME")
 
-    # 6-month long-term view.
-    return _resample_ohlcv(daily, rule="6ME")
+    # Yearly long-term view.
+    return _resample_ohlcv(daily, rule="YE")
 
 
 def multi_timeframe_predict(
@@ -618,7 +1118,7 @@ def multi_timeframe_predict(
         symbol: Yahoo ticker symbol.
         start_date: Start date YYYY-MM-DD.
         end_date: End date YYYY-MM-DD.
-        timeframes: Subset of ["intraday", "1d", "1w", "1m", "6m"].
+        timeframes: Subset of ["intraday", "1d", "1w", "1m", "6m", "1y"].
         model_family: Model family used by train_model.
 
     Returns:
@@ -695,7 +1195,8 @@ def get_stock_prediction_summary(symbol: str, capital: float) -> StockPrediction
           "intraday": "UP/DOWN",
           "1d": "UP/DOWN",
           "1m": "UP/DOWN",
-          "6m": "UP/DOWN"
+          "6m": "UP/DOWN",
+          "1y": "UP/DOWN"
       },
       "trade_levels": {"entry": ..., "target": ..., "stop_loss": ...},
       "profit_loss": {
@@ -729,7 +1230,7 @@ def get_stock_prediction_summary(symbol: str, capital: float) -> StockPrediction
     prediction = "UP" if confidence >= 0.5 else "DOWN"
 
     # Multi-timeframe directional view.
-    timeframe_keys = ["intraday", "1d", "1m", "6m"]
+    timeframe_keys = ["intraday", "1d", "1m", "6m", "1y"]
     timeframe_predictions: Dict[str, str] = {}
     for timeframe in timeframe_keys:
         try:
@@ -1083,8 +1584,14 @@ def train_stock_model(
         print(f"Win Rate: {float(custom_metrics.get('win_rate', 0.0)):.2%}")
         print(f"Drawdown: {float(custom_metrics.get('max_drawdown', 0.0)):.2%}")
     else:
-        backtest_vectorbt = {"engine": "vectorbt", "metrics": {}, "equity_curve": [], "trade_history": []}
-        backtest_backtrader = {"engine": "backtrader", "metrics": {}, "equity_curve": [], "trade_history": []}
+        backtest_vectorbt = cast(
+            BacktestResult,
+            {"engine": "vectorbt", "metrics": {}, "equity_curve": [], "trade_history": []},
+        )
+        backtest_backtrader = cast(
+            BacktestResult,
+            {"engine": "backtrader", "metrics": {}, "equity_curve": [], "trade_history": []},
+        )
         backtest_custom = {"metrics": {}, "equity_curve": [], "trade_history": []}
 
     if save_models:

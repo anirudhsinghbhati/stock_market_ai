@@ -1,263 +1,102 @@
-# Stock AI - Stock Market Direction Predictor
+# Stock AI
 
-An advanced machine learning system for predicting stock market direction (UP or DOWN) using historical price data, technical indicators, and sentiment analysis.
+Stock AI is a machine-learning powered stock direction and trade-setup assistant for Indian market tickers (for example RELIANCE.NS).
 
-## 📊 Project Overview
+It combines price-based features, technical indicators, optional sentiment, and backtesting to produce:
 
-This project builds a binary classification model to predict whether a stock's price will go UP or DOWN for the next day. It combines multiple data sources and techniques:
+- BUY, SELL, HOLD signal
+- Confidence score
+- Suggested entry, target, and stop-loss levels
+- Multi-timeframe view
+- Risk and performance summary
 
-- **Historical Data**: OHLCV (Open, High, Low, Close, Volume) data from Yahoo Finance
-- **Technical Indicators**: SMA, EMA, RSI, MACD, Bollinger Bands
-- **Machine Learning**: Random Forest classifier with evaluation metrics
-- **Interactive UI**: Streamlit web application for easy model training and predictions
+Important: This project is for research and educational use, not financial advice.
 
-## ✅ Completed Components
+## Highlights
 
-### 1. **Data Loading Module** (`src/data_loader.py`)
-- Fetches historical stock data using yfinance
-- Validates data integrity and handles missing values
-- Supports custom date ranges
-- Returns clean OHLCV DataFrame with Date as a column
-- Includes error handling and logging
+- Interactive Streamlit app for analysis and visualization
+- Multi-model workflow (Random Forest, XGBoost, LightGBM, ensemble)
+- Technical indicators and market context features
+- Backtesting with trade logs and metrics
+- FastAPI endpoints for train and predict workflows
+- Daily scheduler scripts for automated runs
 
-### 2. **Feature Engineering Module** (`src/features.py`)
-- Calculates technical indicators using the `ta` library
-- **Implemented Features:**
-  - Simple Moving Average (SMA) - 10 and 50 day periods
-  - Exponential Moving Average (EMA)
-  - Relative Strength Index (RSI)
-  - MACD (Moving Average Convergence Divergence)
-  - Bollinger Bands (upper and lower bands)
-- Standard scaling/normalization of features
-- Handles NaN values effectively
+## Project Structure
 
-### 3. **Sentiment Analysis Module** (`src/sentiment.py`)
-- Uses Hugging Face transformers library
-- Pretrained sentiment model (DistilBERT-based)
-- Functions for:
-  - Single text analysis
-  - Batch processing of headlines
-  - Daily sentiment aggregation
-- Output: -1 (negative), 0 (neutral), +1 (positive)
+```text
+stock-ai/
+  app/
+    Streamlit_main_app.py
+    streamlit_app.py
+    api.py
+  src/
+    train.py
+    model.py
+    features.py
+    data_loader.py
+    backtesting.py
+    sentiment.py
+    sentiment_data.py
+    realtime_scheduler.py
+    run_daily_once.py
+  data/
+  models/
+  notebooks/
+  README.md
+  DEVELOPER_GUIDE.md
+```
 
-### 4. **Model Training Module** (`src/model.py`)
-- **Classifier**: Random Forest (with XGBoost support)
-- Train/test split with time series consideration
-- **Evaluation Metrics**:
-  - Accuracy
-  - Precision
-  - Recall
-- Feature importance analysis
-- Clean, modular training functions
+## Quick Start
 
-### 5. **Training Pipeline** (`src/train.py`)
-- Orchestrates the full ML workflow:
-  1. Data fetching and loading
-  2. Feature engineering
-  3. Target variable creation (next-day direction)
-  4. Model training
-  5. Latest prediction generation
-- Returns comprehensive results: model, metrics, dataset, feature columns
-- Proper error handling and TypedDict definitions
+### 1. Install dependencies
 
-### 6. **Streamlit Web Application** (`app/streamlit_app.py`)
-- Interactive user interface for model training and predictions
-- **Configuration Options**:
-  - Ticker symbol input (default: RELIANCE.NS)
-  - Custom date range selection
-  - Train and predict button
-- **Display Features**:
-  - Real-time accuracy, precision, recall metrics
-  - Latest predicted direction (UP/DOWN)
-  - Enriched dataset preview (last 20 rows)
-  - Feature columns list
-
-## 🚀 How to Use
-
-### Prerequisites
-- Python 3.8+
-- Virtual environment (recommended)
-
-### Installation
 ```bash
-# Create virtual environment
 python -m venv .venv
-
-# Activate virtual environment
-# On Windows:
+# Windows
 .venv\Scripts\activate
-# On macOS/Linux:
+# macOS/Linux
 source .venv/bin/activate
 
-# Install dependencies (add these to requirements.txt)
-pip install pandas numpy scikit-learn yfinance ta transformers torch streamlit fastapi uvicorn
+pip install -r requirements.txt
 ```
 
-### Running the Application
+If requirements.txt is not present, install common dependencies manually:
+
 ```bash
-# From the project root directory
-streamlit run app/streamlit_app.py
+pip install pandas numpy scikit-learn yfinance ta transformers torch streamlit fastapi uvicorn xgboost lightgbm plotly
 ```
 
-Then open your browser and navigate to `http://localhost:8501`
+### 2. Run Streamlit app
 
-### Running the REST API (FastAPI)
 ```bash
-# From the project root directory
+streamlit run app/Streamlit_main_app.py
+```
+
+Open http://localhost:8501
+
+### 3. Run API
+
+```bash
 uvicorn app.api:app --reload
 ```
 
-Open API docs:
-- `http://127.0.0.1:8000/docs`
+Open docs at http://127.0.0.1:8000/docs
 
-Available endpoints:
-- `POST /train`
-- `POST /predict`
-- `GET /metrics`
+## Supported Workflows
 
-Persistence behavior:
-- `/train` stores model artifacts in `models/model.pkl`, `models/return_model.pkl`, `models/multiclass_model.pkl`
-- `/train` also stores API metadata in `models/api_state.json`
-- After server restart, `POST /predict` can run with `{"retrain_if_missing": false}` by loading persisted models and rebuilding the latest features from market data (no retraining required)
+- Manual analysis from Streamlit UI
+- API-based training and prediction
+- Scheduled daily prediction via src/run_daily_once.py or src/realtime_scheduler.py
 
-Example `POST /train` body:
-```json
-{
-  "symbol": "RELIANCE.NS",
-  "start_date": "2020-01-01",
-  "end_date": "2026-03-26",
-  "model_family": "ensemble",
-  "buy_threshold": 0.7,
-  "sell_threshold": 0.3,
-  "sl_stop": 0.02,
-  "tp_stop": 0.04,
-  "save_models": true
-}
-```
+## Notes
 
-Example `POST /predict` body:
-```json
-{
-  "retrain_if_missing": false
-}
-```
+- Use Yahoo Finance ticker format correctly (example: INFY.NS, TCS.NS).
+- First sentiment run may be slower because the transformer model is downloaded and cached.
+- Results can vary by timeframe and market regime.
 
-### Automated Daily Predictions
+## Developer Documentation
 
-The project now includes scheduler scripts for unattended daily prediction runs.
-
-#### 1) Run once (manual trigger)
-```bash
-python src/run_daily_once.py
-```
-
-Artifacts are written to `data/realtime/`:
-- `latest_<SYMBOL>.json`
-- `prediction_<SYMBOL>_<TIMESTAMP>.json`
-- `predictions_<SYMBOL>.csv`
-
-#### 2) Run continuously with built-in scheduler (APScheduler)
-```bash
-python src/realtime_scheduler.py
-```
-
-Optional environment variables:
-- `SYMBOL` (default: `RELIANCE.NS`)
-- `MODEL_FAMILY` (default: `ensemble`)
-- `BUY_THRESHOLD` (default: `0.7`)
-- `SELL_THRESHOLD` (default: `0.3`)
-- `SL_STOP` (default: `0.02`)
-- `TP_STOP` (default: `0.04`)
-- `TIMEZONE` (default: `Asia/Kolkata`)
-- `RUN_HOUR` (default: `18`)
-- `RUN_MINUTE` (default: `0`)
-
-#### 3) Windows Task Scheduler (daily run)
-Create a basic task that runs daily and set Program/script to your virtual environment Python executable, with arguments:
-```bash
-src/run_daily_once.py
-```
-Set Start in to the project root folder.
-
-#### 4) Cron (Linux/macOS)
-Run daily at 18:00 Asia/Kolkata equivalent server time:
-```bash
-0 18 * * * cd /path/to/stock-ai && /path/to/python src/run_daily_once.py >> logs/realtime.log 2>&1
-```
-
-### Using Programmatically
-```python
-from src.train import train_stock_model, predict_latest_direction
-
-# Train model
-result = train_stock_model(
-    symbol="RELIANCE.NS",
-    start_date="2020-01-01",
-    end_date="2024-01-01"
-)
-
-# Get prediction
-prediction = predict_latest_direction(
-    result["model"],
-    result["dataset"],
-    result["feature_columns"]
-)
-```
-
-## 📁 Project Structure
-
-```
-stock-ai/
-├── app/
-│   └── streamlit_app.py          # Interactive web interface
-├── src/
-│   ├── data_loader.py            # Yahoo Finance data fetching
-│   ├── features.py               # Technical indicator engineering
-│   ├── sentiment.py              # News sentiment analysis
-│   ├── model.py                  # ML model training and prediction
-│   └── train.py                  # Full pipeline orchestration
-├── data/                         # Data storage (future)
-├── models/                       # Saved model storage (future)
-├── notebooks/                    # Jupyter notebooks (future)
-└── README.md                     # This file
-```
-
-## 🔧 Technical Stack
-
-- **Data Processing**: pandas, numpy
-- **Machine Learning**: scikit-learn, xgboost (optional)
-- **Technical Indicators**: ta (Technical Analysis library)
-- **Data Source**: yfinance
-- **NLP/Sentiment**: Hugging Face transformers, PyTorch
-- **Web Framework**: Streamlit
-- **Visualization**: matplotlib (integrated in model.py)
-
-## 📊 Data Flow
-
-```
-Raw Stock Data (yfinance)
-         ↓
-Feature Engineering (Technical Indicators)
-         ↓
-Target Creation (Next-day Direction)
-         ↓
-Train/Test Split
-         ↓
-Model Training (Random Forest)
-         ↓
-Evaluation Metrics
-         ↓
-Latest Direction Prediction
-         ↓
-Streamlit UI Display
-```
-
-## ⚙️ Configuration
-
-You can customize the following:
-- **Ticker symbols**: Any valid Yahoo Finance ticker
-- **Date ranges**: Custom start and end dates
-- **Technical indicators**: Modify periods in `features.py`
+For implementation details, architecture, module-level behavior, and maintenance guidance, see DEVELOPER_GUIDE.md.
 - **Model parameters**: Adjust Random Forest hyperparameters in `model.py`
 
 ## 📈 Output Metrics
