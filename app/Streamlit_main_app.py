@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import base64
 from datetime import date, datetime, time
 from typing import Any, Dict
 from urllib.error import URLError
@@ -597,7 +598,18 @@ def _initialize_sector_models() -> dict[str, Any]:
         return {"status": "error", "message": str(exc)}
 
 
-st.set_page_config(page_title="AI Stock Analyzer Pro", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
+logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
+page_icon = logo_path if os.path.exists(logo_path) else "📈"
+
+header_logo_html = "<span class='header-logo-fallback'>📈</span>"
+if os.path.exists(logo_path):
+    with open(logo_path, "rb") as logo_file:
+        logo_b64 = base64.b64encode(logo_file.read()).decode("ascii")
+    header_logo_html = (
+        f"<img class='header-logo' src='data:image/png;base64,{logo_b64}' alt='Stock Market AI Logo' />"
+    )
+
+st.set_page_config(page_title="Stock Market AI", page_icon=page_icon, layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown(
     """
@@ -614,16 +626,10 @@ st.markdown(
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            background:
-                radial-gradient(1200px 600px at 10% -10%, rgba(6,182,212,0.15), transparent 60%),
-                radial-gradient(900px 500px at 100% 0%, rgba(14,165,164,0.12), transparent 55%),
-                linear-gradient(155deg, var(--bg-1) 0%, var(--bg-2) 100%);
+            background: #000000 !important;
         }
         .stApp {
-            background:
-                radial-gradient(1200px 600px at 10% -10%, rgba(6,182,212,0.15), transparent 60%),
-                radial-gradient(900px 500px at 100% 0%, rgba(14,165,164,0.12), transparent 55%),
-                linear-gradient(155deg, var(--bg-1) 0%, var(--bg-2) 100%);
+            background: #000000 !important;
         }
         .header-container {
             background: linear-gradient(140deg, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.5) 100%);
@@ -631,6 +637,21 @@ st.markdown(
             border-bottom: 1px solid var(--panel-border);
             margin: -80px -40px 0 -40px;
             backdrop-filter: blur(10px);
+        }
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .header-logo {
+            height: 34px;
+            width: 34px;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+        .header-logo-fallback {
+            font-size: 30px;
+            line-height: 1;
         }
         .header-title {
             font-size: 34px;
@@ -793,8 +814,17 @@ st.markdown(
             background: rgba(15, 23, 42, 0.55);
         }
     </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    f"""
     <div class="header-container">
-        <h1 class="header-title">📈 AI Stock Analyzer Pro</h1>
+        <div class="header-brand">
+            {header_logo_html}
+            <h1 class="header-title">Stock Market AI</h1>
+        </div>
         <p class="header-subtitle">Professional trading insights powered by machine learning</p>
     </div>
     """,
@@ -1506,6 +1536,37 @@ st.markdown(
     <div style="background:linear-gradient(135deg, rgba(239,68,68,0.1), rgba(239,68,68,0.05));border:1px solid #ef4444;border-radius:8px;padding:16px;">
     <div style="color:#fca5a5;font-size:13px;font-weight:500;">⚠️ <strong>Risk Disclaimer</strong></div>
       <div style="color:#cbd5e1;font-size:12px;margin-top:6px;line-height:1.6;">This AI prediction is probabilistic and NOT financial advice. Always use stop-loss, manage risk responsibly, and consult a financial advisor before trading.</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# Footer Section (visible on all pages)
+st.markdown("<div style='margin:60px 0 30px 0;border-top:1px solid rgba(148,163,184,0.2);padding-top:30px;'></div>", unsafe_allow_html=True)
+st.markdown(
+    """
+    <div style="text-align:center;color:#94a3b8;padding:20px;border-top:1px solid rgba(148,163,184,0.15);">
+        <div style="margin-bottom:16px;">
+            <p style="font-size:12px;color:#cbd5e1;margin-bottom:12px;">
+                <strong>Stock Market AI</strong> • Professional Trading Insights Powered by Machine Learning
+            </p>
+        </div>
+        <div style="display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:16px;">
+            <a href="mailto:bhatianirudhsingh592@gmail.com" style="color:#06b6d4;text-decoration:none;font-size:13px;font-weight:500;">
+                📧 Email: bhatianirudhsingh592@gmail.com
+            </a>
+            <a href="https://github.com/anirudhsinghbhati" target="_blank" style="color:#06b6d4;text-decoration:none;font-size:13px;font-weight:500;">
+                GitHub: github.com/anirudhsinghbhati
+            </a>
+            <a href="https://www.linkedin.com/in/anirudh-singh-bhati-0a4455274/" target="_blank" style="color:#06b6d4;text-decoration:none;font-size:13px;font-weight:500;">
+                LinkedIn: linkedin.com/in/anirudhsinghbhati
+            </a>
+        </div>
+        <div style="border-top:1px solid rgba(148,163,184,0.15);padding-top:12px;margin-top:12px;">
+            <p style="font-size:11px;color:#64748b;margin:4px 0;">
+                Built with Streamlit | XGBoost | Scikit-learn | Technical Analysis
+            </p>
+        </div>
     </div>
     """,
     unsafe_allow_html=True,

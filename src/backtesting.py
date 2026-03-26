@@ -327,7 +327,11 @@ def _run_vectorbt_backtest(
     tp_stop: float,
 ) -> BacktestResult:
     """Run a vectorbt portfolio simulation and return risk/performance metrics."""
-    import vectorbt as vbt
+    try:
+        import vectorbt as vbt
+    except ImportError:
+        # Fallback to backtrader if vectorbt is not installed
+        return _run_backtrader_backtest(prices, probabilities, buy_threshold, sell_threshold, sl_stop, tp_stop)
 
     long_entries, long_exits, short_entries, short_exits = _prepare_signals(
         probabilities,
@@ -535,5 +539,9 @@ def run_backtest(
     probs = pd.Series(probability_series.astype(float).to_numpy(), index=prices.index)
 
     if engine == "vectorbt":
-        return _run_vectorbt_backtest(prices, probs, buy_threshold, sell_threshold, sl_stop, tp_stop)
+        try:
+            return _run_vectorbt_backtest(prices, probs, buy_threshold, sell_threshold, sl_stop, tp_stop)
+        except ImportError:
+            # Gracefully fallback to backtrader if vectorbt is not available
+            return _run_backtrader_backtest(prices, probs, buy_threshold, sell_threshold, sl_stop, tp_stop)
     return _run_backtrader_backtest(prices, probs, buy_threshold, sell_threshold, sl_stop, tp_stop)

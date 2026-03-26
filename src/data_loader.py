@@ -80,6 +80,21 @@ def fetch_stock_data(symbol: str, start_date: str, end_date: Optional[str] = Non
         raise ValueError(f"Missing required OHLCV columns: {missing_columns}")
 
     data = data.reset_index()
+    
+    # Handle case where index name might be "Datetime" or "Date"
+    if "Date" not in data.columns:
+        if "Datetime" in data.columns:
+            data = data.rename(columns={"Datetime": "Date"})
+        elif data.index.name == "Date" or data.index.name == "Datetime":
+            data = data.reset_index()
+            if "Datetime" in data.columns:
+                data = data.rename(columns={"Datetime": "Date"})
+        else:
+            # Last resort: assume first column (after reset_index) is the date
+            date_col = data.columns[0]
+            if date_col not in REQUIRED_COLUMNS:
+                data = data.rename(columns={date_col: "Date"})
+    
     data = data[["Date", *REQUIRED_COLUMNS]].copy()
     data = data.dropna(subset=REQUIRED_COLUMNS)
 
@@ -120,6 +135,18 @@ def fetch_external_market_signals(start_date: str, end_date: Optional[str] = Non
                 continue
 
             signal_df = frame[[close_col]].rename(columns={close_col: output_name}).reset_index()
+            
+            # Handle different date column names from yfinance
+            if "Date" not in signal_df.columns:
+                if "Datetime" in signal_df.columns:
+                    signal_df = signal_df.rename(columns={"Datetime": "Date"})
+                else:
+                    # Find the first non-numeric column (likely the date)
+                    for col in signal_df.columns:
+                        if pd.api.types.is_datetime64_any_dtype(signal_df[col]) or col == signal_df.columns[0]:
+                            signal_df = signal_df.rename(columns={col: "Date"})
+                            break
+            
             signal_df["Date"] = pd.to_datetime(signal_df["Date"]).dt.normalize()
 
             if merged is None:
