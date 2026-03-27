@@ -31,8 +31,10 @@ apscheduler>=3.10.4
 pytz>=2023.3
 
 # Backtesting
-vectorbt>=0.24.0
-backtrader>=21.19.0
+backtrader>=1.9.78.123
+
+# Optional Backtesting Engine (can fail on some cloud Python images due to numba/llvmlite wheels)
+# vectorbt>=0.24.0
 
 # Type Hints & Utilities
 typing-extensions>=4.8.0
