@@ -23,12 +23,12 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from src.data_loader import fetch_stock_data
+from src.features import add_features
 from src.sentiment_data import fetch_news_headlines
 from src.train import (
     DEFAULT_NSE_STOCKS,
     classify_risk,
     generate_trade_levels,
-    get_stock_prediction_summary,
     train_sector_models,
     train_stock_model,
 )
@@ -352,6 +352,119 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return float(default)
+
+
+def _build_summary_from_run(run: dict[str, Any], capital: float) -> dict[str, Any]:
+    """Build UI summary payload from an already computed training/inference run."""
+    dataset = run.get("dataset", pd.DataFrame())
+    if not isinstance(dataset, pd.DataFrame) or dataset.empty:
+        raise ValueError("Run dataset is unavailable.")
+
+    confidence = max(0.0, min(1.0, _to_float(run.get("latest_probability_increase"), 0.5)))
+    prediction = "UP" if confidence >= 0.5 else "DOWN"
+
+    if {"Close", "ATR_14"}.issubset(dataset.columns):
+        levels = generate_trade_levels(df=dataset, prediction=prediction, probability=confidence)
+    else:
+        latest_close = _to_float(dataset.get("Close", pd.Series([0.0])).iloc[-1], 0.0)
+        if prediction == "UP":
+            levels = {
+                "entry": latest_close,
+                "target": latest_close * 1.02,
+                "stop_loss": latest_close * 0.985,
+            }
+        else:
+            levels = {
+                "entry": latest_close,
+                "target": latest_close * 0.98,
+                "stop_loss": latest_close * 1.015,
+            }
+
+    entry = _to_float(levels.get("entry"), 0.0)
+    target = _to_float(levels.get("target"), entry)
+    stop_loss = _to_float(levels.get("stop_loss"), entry)
+    capital_value = float(capital)
+    position_size = (capital_value / entry) if entry > 0 else 0.0
+
+    max_profit_per_share = abs(target - entry)
+    max_loss_per_share = abs(entry - stop_loss)
+    max_profit_rs = float(max_profit_per_share * position_size)
+    max_loss_rs = float(max_loss_per_share * position_size)
+    profit_percent = float((max_profit_rs / capital_value) * 100.0) if capital_value > 0 else 0.0
+    loss_percent = float((max_loss_rs / capital_value) * 100.0) if capital_value > 0 else 0.0
+
+    latest_row = dataset.tail(1)
+    atr_val = _to_float(latest_row["ATR_14"].iloc[0], 0.0) if "ATR_14" in latest_row.columns else 0.0
+    close_val = _to_float(latest_row["Close"].iloc[0], 0.0) if "Close" in latest_row.columns else 0.0
+    volatility = (atr_val / close_val) if close_val > 0 else 0.0
+    risk_level = classify_risk(probability=confidence, volatility=volatility)
+
+    return {
+        "prediction": prediction,
+        "confidence": confidence,
+        "timeframes": {
+            "intraday": "N/A",
+            "1d": prediction,
+            "1m": "N/A",
+            "6m": "N/A",
+            "1y": "N/A",
+        },
+        "trade_levels": {
+            "entry": entry,
+            "target": target,
+            "stop_loss": stop_loss,
+        },
+        "profit_loss": {
+            "max_profit_rs": max_profit_rs,
+            "max_loss_rs": max_loss_rs,
+            "profit_percent": profit_percent,
+            "loss_percent": loss_percent,
+        },
+        "risk_level": risk_level,
+    }
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _run_fast_router_inference(symbol: str, start_date: str, end_date: str) -> dict[str, Any]:
+    """Run deployment-friendly inference using saved sector/global models without retraining."""
+    chart_df = fetch_stock_data(symbol=symbol, start_date=start_date, end_date=end_date)
+    if chart_df.empty:
+        raise ValueError("No chart data available for the selected symbol/timeframe.")
+
+    dataset = add_features(
+        data=chart_df,
+        scale_features=False,
+        symbol=symbol,
+        start_date=start_date,
+        end_date=end_date,
+        remove_correlated=False,
+    )
+    if dataset.empty:
+        raise ValueError("Unable to build features for fast inference.")
+
+    if not callable(predict_with_saved_sector_router):
+        raise ValueError("Sector router is not available in this deployment.")
+
+    latest_features = dataset.tail(1)
+    router_result = predict_with_saved_sector_router(
+        symbol=symbol,
+        latest_features=latest_features,
+        save_dir="models/sector",
+        blend_mode="fixed",
+        fixed_sector_weight=0.65,
+        min_sector_confidence=0.55,
+    )
+    if router_result is None:
+        raise ValueError("Saved sector router artifacts are missing.")
+
+    confidence = _to_float(router_result.get("probability_up"), 0.5)
+    return {
+        "dataset": dataset,
+        "feature_columns": list(dataset.columns),
+        "latest_probability_increase": confidence,
+        "backtest_custom": {"metrics": {}, "equity_curve": [], "trade_history": []},
+        "chart_df": chart_df,
+    }
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -966,20 +1079,35 @@ if should_run_analysis:
     spinner_text = "Analyzing stock with Fast Mode..." if fast_mode else "Analyzing stock and running backtests..."
     with st.spinner(spinner_text):
         try:
-            summary = get_stock_prediction_summary(symbol=symbol, capital=float(investment))
-            run = train_stock_model(
-                symbol=symbol,
-                start_date=start_date,
-                end_date=end_date,
-                buy_threshold=0.75 if strategy == "Conservative" else (0.7 if strategy == "Moderate" else 0.6),
-                sell_threshold=0.25 if strategy == "Conservative" else (0.3 if strategy == "Moderate" else 0.4),
-                sl_stop=0.015 if strategy == "Conservative" else (0.02 if strategy == "Moderate" else 0.03),
-                tp_stop=0.03 if strategy == "Conservative" else (0.04 if strategy == "Moderate" else 0.06),
-                model_family="xgboost",
-                save_models=False,
-                run_backtests=not fast_mode,
-            )
-            chart_df = fetch_stock_data(symbol=symbol, start_date=start_date, end_date=end_date)
+            if fast_mode:
+                fast_payload = _run_fast_router_inference(
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+                run = {
+                    "dataset": fast_payload["dataset"],
+                    "feature_columns": fast_payload["feature_columns"],
+                    "latest_probability_increase": fast_payload["latest_probability_increase"],
+                    "backtest_custom": fast_payload["backtest_custom"],
+                }
+                chart_df = fast_payload["chart_df"]
+                summary = _build_summary_from_run(run=run, capital=float(investment))
+            else:
+                run = train_stock_model(
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    buy_threshold=0.75 if strategy == "Conservative" else (0.7 if strategy == "Moderate" else 0.6),
+                    sell_threshold=0.25 if strategy == "Conservative" else (0.3 if strategy == "Moderate" else 0.4),
+                    sl_stop=0.015 if strategy == "Conservative" else (0.02 if strategy == "Moderate" else 0.03),
+                    tp_stop=0.03 if strategy == "Conservative" else (0.04 if strategy == "Moderate" else 0.06),
+                    model_family="xgboost",
+                    save_models=False,
+                    run_backtests=True,
+                )
+                chart_df = fetch_stock_data(symbol=symbol, start_date=start_date, end_date=end_date)
+                summary = _build_summary_from_run(run=run, capital=float(investment))
         except Exception as exc:
             st.exception(exc)
             st.stop()
