@@ -724,6 +724,38 @@ if os.path.exists(logo_path):
 
 st.set_page_config(page_title="Stock Market AI", page_icon=page_icon, layout="wide", initial_sidebar_state="collapsed")
 
+
+def _render_global_footer() -> None:
+    st.markdown("<div style='margin:60px 0 30px 0;border-top:1px solid rgba(148,163,184,0.2);padding-top:30px;'></div>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div style="text-align:center;color:#94a3b8;padding:20px;border-top:1px solid rgba(148,163,184,0.15);">
+            <div style="margin-bottom:16px;">
+                <p style="font-size:12px;color:#cbd5e1;margin-bottom:12px;">
+                    <strong>Stock Market AI</strong> • Professional Trading Insights Powered by Machine Learning
+                </p>
+            </div>
+            <div style="display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:16px;">
+                <a href="mailto:bhatianirudhsingh592@gmail.com" style="color:#06b6d4;text-decoration:none;font-size:13px;font-weight:500;">
+                    📧 Email: bhatianirudhsingh592@gmail.com
+                </a>
+                <a href="https://github.com/anirudhsinghbhati" target="_blank" style="color:#06b6d4;text-decoration:none;font-size:13px;font-weight:500;">
+                    GitHub: github.com/anirudhsinghbhati
+                </a>
+                <a href="https://www.linkedin.com/in/anirudh-singh-bhati-0a4455274/" target="_blank" style="color:#06b6d4;text-decoration:none;font-size:13px;font-weight:500;">
+                    LinkedIn: linkedin.com/in/anirudhsinghbhati
+                </a>
+            </div>
+            <div style="border-top:1px solid rgba(148,163,184,0.15);padding-top:12px;margin-top:12px;">
+                <p style="font-size:11px;color:#64748b;margin:4px 0;">
+                    Built with Streamlit | XGBoost | Scikit-learn | Technical Analysis
+                </p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 st.markdown(
     """
     <style>
@@ -926,6 +958,135 @@ st.markdown(
             padding: 8px;
             background: rgba(15, 23, 42, 0.55);
         }
+        @media (max-width: 768px) {
+            html, body, .stApp {
+                overflow-x: hidden;
+            }
+            [data-testid="block-container"] {
+                padding-left: 0.8rem !important;
+                padding-right: 0.8rem !important;
+                padding-top: 0.8rem !important;
+            }
+            .header-container {
+                margin: -80px -0.8rem 0 -0.8rem;
+                padding: 18px 14px;
+            }
+            .header-logo {
+                height: 28px;
+                width: 28px;
+            }
+            .header-logo-fallback {
+                font-size: 24px;
+            }
+            .header-title {
+                font-size: 24px;
+                letter-spacing: -0.2px;
+            }
+            .header-subtitle {
+                font-size: 12px;
+                margin-top: 4px;
+            }
+            .metric-row {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            .metric-card {
+                padding: 12px;
+            }
+            .metric-card > div:first-child {
+                font-size: 11px !important;
+            }
+            .metric-card > div:nth-child(2) {
+                font-size: 20px !important;
+            }
+            .metric-card > div:nth-child(3) {
+                font-size: 11px !important;
+            }
+            .command-grid {
+                grid-template-columns: 1fr;
+            }
+            .command-value {
+                font-size: 16px;
+            }
+            .command-symbol {
+                font-size: 19px !important;
+            }
+            .command-heading {
+                font-size: 11px !important;
+            }
+            .command-chip {
+                font-size: 11px !important;
+                padding: 4px 8px !important;
+            }
+            .ai-signal-card {
+                padding: 16px !important;
+                border-radius: 10px !important;
+            }
+            .ai-signal-label {
+                font-size: 12px !important;
+            }
+            .ai-signal-value {
+                font-size: 34px !important;
+                line-height: 1.05;
+            }
+            .ai-signal-confidence {
+                font-size: 12px !important;
+            }
+            .ai-signal-risk {
+                font-size: 11px !important;
+                padding: 4px 10px !important;
+            }
+            .mobile-stack-cards {
+                flex-direction: column !important;
+                gap: 10px !important;
+            }
+            .mobile-stack-cards > div {
+                width: 100% !important;
+                padding: 10px !important;
+            }
+            .mobile-stack-cards > div > div:first-child,
+            .mobile-stack-cards > div > div:nth-child(3) {
+                font-size: 10px !important;
+            }
+            .mobile-stack-cards > div > div:nth-child(2) {
+                font-size: 18px !important;
+            }
+            .trade-card {
+                padding: 12px !important;
+            }
+            .trade-card-title {
+                font-size: 10px !important;
+            }
+            .trade-card-value {
+                font-size: 22px !important;
+            }
+            .stButton > button {
+                width: 100% !important;
+            }
+            div[data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap !important;
+                gap: 0.5rem !important;
+            }
+            div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+                min-width: 0 !important;
+                flex: 1 1 100% !important;
+                width: 100% !important;
+            }
+        }
+        @media (max-width: 420px) {
+            .header-title {
+                font-size: 21px;
+            }
+            .header-subtitle {
+                font-size: 11px;
+            }
+            .ai-signal-value {
+                font-size: 30px !important;
+            }
+            .command-value {
+                font-size: 15px;
+            }
+        }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1061,6 +1222,7 @@ if not st.session_state.get("analysis_active", False):
         unsafe_allow_html=True,
     )
     _render_pre_analysis_market_dashboard()
+    _render_global_footer()
     st.stop()
 
 if not symbol:
@@ -1222,12 +1384,12 @@ st.markdown(
         <div class="command-center">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
                 <div>
-                    <div style="font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.7px;">Trading Command Center</div>
-                    <div style="font-size:22px;font-weight:800;color:#f8fafc;">{symbol}</div>
+                    <div class="command-heading" style="font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.7px;">Trading Command Center</div>
+                    <div class="command-symbol" style="font-size:22px;font-weight:800;color:#f8fafc;">{symbol}</div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
-                    <span style="padding:4px 10px;border-radius:999px;border:1px solid rgba(148,163,184,0.35);color:#cbd5e1;font-size:12px;">Mode: {mode_label}</span>
-                    <span style="padding:4px 10px;border-radius:999px;background:{signal_color};color:#021014;font-weight:700;font-size:12px;">Signal: {decision}</span>
+                    <span class="command-chip" style="padding:4px 10px;border-radius:999px;border:1px solid rgba(148,163,184,0.35);color:#cbd5e1;font-size:12px;">Mode: {mode_label}</span>
+                    <span class="command-chip" style="padding:4px 10px;border-radius:999px;background:{signal_color};color:#021014;font-weight:700;font-size:12px;">Signal: {decision}</span>
                 </div>
             </div>
             <div class="command-grid">
@@ -1300,14 +1462,14 @@ st.markdown("<div style='margin:20px 0;'></div>", unsafe_allow_html=True)
 decision_color = SIGNAL_COLORS.get(decision, "#f59e0b")
 st.markdown(
     f"""
-    <div style="background:linear-gradient(135deg, rgba({"34,197,94" if decision=="BUY" else ("239,68,68" if decision=="SELL" else "245,158,11")}, 0.1), rgba({"34,197,94" if decision=="BUY" else ("239,68,68" if decision=="SELL" else "245,158,11")}, 0.05));border:1px solid {decision_color};border-radius:12px;padding:24px;text-align:center;">
-      <div style="font-size:14px;color:#94a3b8;margin-bottom:8px;">AI Signal</div>
-      <div style="font-size:48px;font-weight:900;color:{decision_color};margin-bottom:16px;letter-spacing:-1px;">{decision}</div>
+        <div class="ai-signal-card" style="background:linear-gradient(135deg, rgba({"34,197,94" if decision=="BUY" else ("239,68,68" if decision=="SELL" else "245,158,11")}, 0.1), rgba({"34,197,94" if decision=="BUY" else ("239,68,68" if decision=="SELL" else "245,158,11")}, 0.05));border:1px solid {decision_color};border-radius:12px;padding:24px;text-align:center;">
+            <div class="ai-signal-label" style="font-size:14px;color:#94a3b8;margin-bottom:8px;">AI Signal</div>
+            <div class="ai-signal-value" style="font-size:48px;font-weight:900;color:{decision_color};margin-bottom:16px;letter-spacing:-1px;">{decision}</div>
       <div style="background:linear-gradient(90deg, #1e293b, #0f172a);border-radius:999px;padding:8px;margin-bottom:12px;">
         <div style="height:8px;background:{decision_color};border-radius:999px;width:{int(max(0, min(100, confidence * 100)))}%;transition:width 0.3s ease;"></div>
       </div>
-      <div style="color:#e2e8f0;font-size:13px;margin-bottom:8px;font-weight:500;">Confidence: {confidence:.1%}</div>
-      <div style="display:inline-block;background:{decision_color};color:#000;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:600;">Risk: {risk_level}</div>
+            <div class="ai-signal-confidence" style="color:#e2e8f0;font-size:13px;margin-bottom:8px;font-weight:500;">Confidence: {confidence:.1%}</div>
+            <div class="ai-signal-risk" style="display:inline-block;background:{decision_color};color:#000;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:600;">Risk: {risk_level}</div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -1351,9 +1513,9 @@ trade_col1, trade_col2, trade_col3 = st.columns(3, gap="small")
 with trade_col1:
     st.markdown(
         f"""
-        <div style="background:linear-gradient(135deg, #1e293b, #0f172a);border:1px solid #2563eb;border-radius:8px;padding:16px;text-align:center;">
-          <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;">Entry Price</div>
-          <div style="font-size:28px;font-weight:700;color:#2563eb;">₹{entry_price:,.2f}</div>
+                <div class="trade-card" style="background:linear-gradient(135deg, #1e293b, #0f172a);border:1px solid #2563eb;border-radius:8px;padding:16px;text-align:center;">
+                    <div class="trade-card-title" style="font-size:11px;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;">Entry Price</div>
+                    <div class="trade-card-value" style="font-size:28px;font-weight:700;color:#2563eb;">₹{entry_price:,.2f}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1362,9 +1524,9 @@ with trade_col1:
 with trade_col2:
     st.markdown(
         f"""
-        <div style="background:linear-gradient(135deg, #1e293b, #0f172a);border:1px solid #22c55e;border-radius:8px;padding:16px;text-align:center;">
-          <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;">Target Price</div>
-          <div style="font-size:28px;font-weight:700;color:#22c55e;">₹{target_price:,.2f}</div>
+                <div class="trade-card" style="background:linear-gradient(135deg, #1e293b, #0f172a);border:1px solid #22c55e;border-radius:8px;padding:16px;text-align:center;">
+                    <div class="trade-card-title" style="font-size:11px;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;">Target Price</div>
+                    <div class="trade-card-value" style="font-size:28px;font-weight:700;color:#22c55e;">₹{target_price:,.2f}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1373,9 +1535,9 @@ with trade_col2:
 with trade_col3:
     st.markdown(
         f"""
-        <div style="background:linear-gradient(135deg, #1e293b, #0f172a);border:1px solid #ef4444;border-radius:8px;padding:16px;text-align:center;">
-          <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;">Stop Loss</div>
-          <div style="font-size:28px;font-weight:700;color:#ef4444;">₹{stop_loss_price:,.2f}</div>
+                <div class="trade-card" style="background:linear-gradient(135deg, #1e293b, #0f172a);border:1px solid #ef4444;border-radius:8px;padding:16px;text-align:center;">
+                    <div class="trade-card-title" style="font-size:11px;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;">Stop Loss</div>
+                    <div class="trade-card-value" style="font-size:28px;font-weight:700;color:#ef4444;">₹{stop_loss_price:,.2f}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1394,7 +1556,7 @@ rr_ratio = (max_profit / max_loss) if max_loss > 0 else 0.0
 pnl_col1, pnl_col2, pnl_col3 = st.columns(3, gap="small")
 
 pnl_markdown = f"""
-<div style="display:flex;gap:12px;margin-bottom:12px;">
+<div class="mobile-stack-cards" style="display:flex;gap:12px;margin-bottom:12px;">
   <div style="flex:1;background:linear-gradient(135deg, #1e293b, #0f172a);border:1px solid #22c55e;border-radius:8px;padding:12px;text-align:center;">
     <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;">Max Profit</div>
     <div style="font-size:20px;font-weight:700;color:#22c55e;">₹{max_profit:,.0f}</div>
@@ -1627,7 +1789,7 @@ if not fast_mode:
     max_dd_val = float(custom_metrics.get('max_drawdown', 0.0))
 
     bt_markdown = f"""
-<div style="display:flex;gap:12px;margin-bottom:16px;">
+<div class="mobile-stack-cards" style="display:flex;gap:12px;margin-bottom:16px;">
     <div style="flex:1;background:linear-gradient(135deg, #1e293b, #0f172a);border:1px solid #22c55e;border-radius:8px;padding:12px;text-align:center;">
         <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;">Win Rate</div>
         <div style="font-size:24px;font-weight:700;color:#22c55e;">{win_rate_val*100:.1f}%</div>
@@ -1669,33 +1831,4 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Footer Section (visible on all pages)
-st.markdown("<div style='margin:60px 0 30px 0;border-top:1px solid rgba(148,163,184,0.2);padding-top:30px;'></div>", unsafe_allow_html=True)
-st.markdown(
-    """
-    <div style="text-align:center;color:#94a3b8;padding:20px;border-top:1px solid rgba(148,163,184,0.15);">
-        <div style="margin-bottom:16px;">
-            <p style="font-size:12px;color:#cbd5e1;margin-bottom:12px;">
-                <strong>Stock Market AI</strong> • Professional Trading Insights Powered by Machine Learning
-            </p>
-        </div>
-        <div style="display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:16px;">
-            <a href="mailto:bhatianirudhsingh592@gmail.com" style="color:#06b6d4;text-decoration:none;font-size:13px;font-weight:500;">
-                📧 Email: bhatianirudhsingh592@gmail.com
-            </a>
-            <a href="https://github.com/anirudhsinghbhati" target="_blank" style="color:#06b6d4;text-decoration:none;font-size:13px;font-weight:500;">
-                GitHub: github.com/anirudhsinghbhati
-            </a>
-            <a href="https://www.linkedin.com/in/anirudh-singh-bhati-0a4455274/" target="_blank" style="color:#06b6d4;text-decoration:none;font-size:13px;font-weight:500;">
-                LinkedIn: linkedin.com/in/anirudhsinghbhati
-            </a>
-        </div>
-        <div style="border-top:1px solid rgba(148,163,184,0.15);padding-top:12px;margin-top:12px;">
-            <p style="font-size:11px;color:#64748b;margin:4px 0;">
-                Built with Streamlit | XGBoost | Scikit-learn | Technical Analysis
-            </p>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+_render_global_footer()
