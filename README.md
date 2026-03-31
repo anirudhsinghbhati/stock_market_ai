@@ -12,6 +12,10 @@ It combines price-based features, technical indicators, optional sentiment, and 
 
 Important: This project is for research and educational use, not financial advice.
 
+## Live Demo
+
+https://s-stock-market-ai.streamlit.app/
+
 ## Highlights
 
 - Interactive Streamlit app for analysis and visualization
